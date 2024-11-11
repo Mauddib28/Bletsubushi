@@ -236,6 +236,8 @@ void loop() {
   // put your main code here, to run repeatedly:
   int n = 0;
   const char *name;
+  //const char *mac_name;
+  //BLEAddress mac_name;
   char mac[19] = { 0 };
   long my_bssid = 0;
   sqlite3_stmt *stmt;
@@ -245,10 +247,10 @@ void loop() {
   // GPS Interaction
   while (SerialPort.available() > 0) {
     if (gps.encode(SerialPort.read())) {
-      Serial.println("[*] Dumping GPS Info");
+      //Serial.println("[*] Dumping GPS Info");
       dumpInfo();
-      Serial.println("[*] Printing GPS Info");
-      gpsInfoDump();
+      //Serial.println("[*] Printing GPS Info");
+      //gpsInfoDump();
     }
   }
   // No GPS Device Detected
@@ -265,19 +267,43 @@ void loop() {
   BLEAdvertisedDevice currentDevice;
   // Parse the Data from the Found Devices
   n = foundDevices->getCount();
-  Serial.printf("[*] Devices Found: %i \n", n);
+  //Serial.printf("[*] Devices Found: %i \n", n);
   for (int i = 0; i < n;  ++i) {
     currentDevice = foundDevices->getDevice(i);
 
     if ((gps.location.isValid()) && (year > 2023)) {
-      Serial.printf("[+] Logging Attempt");
+      //Serial.printf("[+] Logging Attempt\t-\t");
       // Gather Data
       name = currentDevice.getName().c_str();
+      //BLEAddress mac_name;
+      BLEAddress mac_name = BLEAddress(currentDevice.getAddress());
+      //Serial.printf("MAC: ");
+      //Serial.println(mac_name.toString().c_str());
+      //Serial.printf("Name: ");
+      //Serial.println(name);
+      //Serial.printf("Appearance: ");
+      //Serial.println(currentDevice.getAppearance());
+      //Serial.printf("TxPower: ");
+      //Serial.println(currentDevice.getTXPower());
+      //Serial.printf("RSSI: ");
+      //Serial.println(currentDevice.getRSSI());
+      //Serial.printf("AddrType: ");
+      //Serial.println(currentDevice.getAddressType());
+      //Serial.printf("ManufData: ");
+      //Serial.println(currentDevice.getManufacturerData().c_str());
       if (sqlite3_prepare_v2(db1, "SELECT * FROM ble_data WHERE MAC=?", -1, &stmt, NULL) == SQLITE_OK) {
-        sqlite3_bind_text(stmt, 1, mac, -1, SQLITE_STATIC);
+        //sqlite3_bind_text(stmt, 1, mac, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 1, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);
+        //Serial.println(sqlite3_step(stmt));
+        //Serial.println(SQLITE_ROW);
+        //Serial.println(stmt);
+        //Serial.printf("%s: %s\n", sqlite3_errstr(sqlite3_extended_errcode(db1)), sqlite3_errmsg(db1));
         if (sqlite3_step(stmt) == SQLITE_ROW) {
           int rssi = currentDevice.getRSSI();
           int existingRssi = sqlite3_column_int(stmt, 6);
+          //Serial.printf("Current RSSI: ");
+          //Serial.println(rssi);
+          //Serial.printf("Old RSSIL ");
           // If RSSI better, update location data
           if (rssi > existingRssi) {
             sqlite3_finalize(stmt);
@@ -294,6 +320,7 @@ void loop() {
             sqlite3_bind_double(stmt, 9, acc); // Accuracy Meters
             sqlite3_bind_int(stmt, 10, currentDevice.getAddressType()); // Address Type
             sqlite3_bind_text(stmt, 11, currentDevice.getManufacturerData().c_str(), strlen(currentDevice.getManufacturerData().c_str()), SQLITE_STATIC); // Manufacturer Data
+            sqlite3_bind_text(stmt, 12, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);  // BT Address MAC
             if (sqlite3_step(stmt) != SQLITE_DONE) {
               Serial.println(F("Failed to execute update statement"));
             }
@@ -308,14 +335,15 @@ void loop() {
             sqlite3_bind_int(stmt, 5, currentDevice.getRSSI()); // RSSI
             sqlite3_bind_int(stmt, 6, currentDevice.getAddressType()); // Address Type
             sqlite3_bind_text(stmt, 7, currentDevice.getManufacturerData().c_str(), strlen(currentDevice.getManufacturerData().c_str()), SQLITE_STATIC); // Manufacturer Data
+            sqlite3_bind_text(stmt, 8, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);  // BT Address MAC
             if (sqlite3_step(stmt) != SQLITE_DONE) {
               Serial.println(F("Failed to execute update statement"));
             }
           }
         } else {
           sqlite3_finalize(stmt);
-          sqlite3_prepare_v2(db1, "INSERT INTO ble_data (MAC, Name, Appearance, FirstSeen, LastSeen, TxPower, RSSI, CurrentLatitude, CurrentLongitude, AltitudeMeters, AccuracyMeters, AddrType, ManufData) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,)", -1, &stmt, NULL);
-          sqlite3_bind_text(stmt, 1, currentDevice.getAddress().toString().c_str(), strlen(currentDevice.getAddress().toString().c_str()), SQLITE_STATIC);  // BT Address MAC
+          sqlite3_prepare_v2(db1, "INSERT INTO ble_data (MAC, Name, Appearance, FirstSeen, LastSeen, TxPower, RSSI, CurrentLatitude, CurrentLongitude, AltitudeMeters, AccuracyMeters, AddrType, ManufData) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", -1, &stmt, NULL);
+          sqlite3_bind_text(stmt, 1, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);  // BT Address MAC
           sqlite3_bind_text(stmt, 2, name, strlen(name), SQLITE_STATIC);  // Name
           sqlite3_bind_int(stmt, 3, currentDevice.getAppearance()); // Appearance
           sqlite3_bind_text(stmt, 4, my_timestamp, strlen(my_timestamp), SQLITE_STATIC); // First Seen
@@ -329,7 +357,12 @@ void loop() {
           sqlite3_bind_int(stmt, 12, currentDevice.getAddressType()); // Address Type
           sqlite3_bind_text(stmt, 13, currentDevice.getManufacturerData().c_str(), strlen(currentDevice.getManufacturerData().c_str()), SQLITE_STATIC); // Manufacturer Data
           if (sqlite3_step(stmt) != SQLITE_DONE) {
+            Serial.printf("Addendum of Address %s\t-\t", mac_name.toString().c_str());
             Serial.println(F("Failed to execute insert statement"));
+            //Serial.println(sqlite3_step(stmt));
+            //Serial.println(SQLITE_DONE);
+            //Serial.println(stmt);
+            Serial.printf("%s: %s\n", sqlite3_errstr(sqlite3_extended_errcode(db1)), sqlite3_errmsg(db1));
           }
         }
         sqlite3_finalize(stmt);
@@ -385,7 +418,7 @@ void loop() {
       display.drawString(0, OLED_OFFSET, my_count);
       display.display();
       break;
-    case 3: // Display total OPEN AuthMode from DB
+    case 3: // Display total HID Appearance from DB
       rc = sqlite3_prepare_v2(db1, "SELECT COUNT(*) from ble_data WHERE Appearance = '0'", -1, &stmt, 0);
       if (rc == SQLITE_OK) {
         rc = sqlite3_step(stmt);
