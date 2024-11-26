@@ -213,6 +213,11 @@ def find_appear_string(appear_id, yaml_content):
                         subcategory_name = subcategory_entry['name']
             else:
                 subcategory_name = ""
+    # Check for Default Values
+    if category_name == "-=???=-":
+        category_name = "0x{0:03x}".format(category_id)
+    if subcategory_name == "-=SUB-???=-":
+        subcategory_name = "0x{0:02x}".format(subcategory_id)
     # Return the Category and Subcategory names
     return category_name, subcategory_name
 
