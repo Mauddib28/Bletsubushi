@@ -413,7 +413,7 @@ void loop() {
         }
       }
       sqlite3_finalize(stmt);
-      snprintf(my_count, sizeof(my_count) - 1, "Logged Devs: %d", count);
+      snprintf(my_count, sizeof(my_count) - 1, "Logged: %d", count);
       display.clear();
       display.drawString(0, OLED_OFFSET, my_count);
       display.display();
@@ -427,7 +427,7 @@ void loop() {
         }
       }
       sqlite3_finalize(stmt);
-      snprintf(my_count, sizeof(my_count) - 1, "HIDs: %d", count);
+      snprintf(my_count, sizeof(my_count) - 1, "UBOs: %d", count);
       display.clear();
       display.drawString(0, OLED_OFFSET, my_count);
       display.display();
