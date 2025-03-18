@@ -243,7 +243,8 @@ void loop() {
   long my_bssid = 0;
   sqlite3_stmt *stmt;
   int count = 0;
-
+  // Tracking duplicate returns from a single scan time quanta
+  static int dup_scan_count = 0;
 
   // GPS Interaction
   while (SerialPort.available() > 0) {
@@ -292,26 +293,29 @@ void loop() {
       //Serial.println(currentDevice.getAddressType());
       //Serial.printf("ManufData: ");
       //Serial.println(currentDevice.getManufacturerData().c_str());
-      Serial.printf("Service Data: ");
-      Serial.println(currentDevice.getServiceData().c_str());
-      Serial.printf("Service Data UUID: ");
-      Serial.println(currentDevice.getServiceDataUUID().toString().c_str());
-      Serial.printf("Service UUID: ");
-      Serial.println(currentDevice.getServiceUUID().toString().c_str());
-      Serial.printf("Payload Type (first byte): ");
-      Serial.println(currentDevice.getPayload()[0], HEX);
-      Serial.printf("Payload Length: ");      // Note: Will have to read the length first, then compile the string out of hex
-      Serial.println(currentDevice.getPayloadLength());
+      //Serial.printf("Service Data: ");
+      //Serial.println(currentDevice.getServiceData().c_str());
+      //Serial.printf("Service Data UUID: ");
+      //Serial.println(currentDevice.getServiceDataUUID().toString().c_str());
+      //Serial.printf("Service UUID: ");
+      //Serial.println(currentDevice.getServiceUUID().toString().c_str());
+      //Serial.printf("Payload Type (first byte): ");
+      //Serial.println(currentDevice.getPayload()[0], HEX);
+      //Serial.printf("Payload Length: ");      // Note: Will have to read the length first, then compile the string out of hex
+      //Serial.println(currentDevice.getPayloadLength());
       // Note: Perhaps maintain the Payload Processing here and leverage is areas below?
       String payload_in_hex = "";
       uint8_t* temp_payload = currentDevice.getPayload();
       size_t temp_payload_length = currentDevice.getPayloadLength();
       for (int i = 0; i < temp_payload_length; i++) {
-        payload_in_hex = payload_in_hex + String(temp_payload[i], HEX);
+        char temp_buffer[3];
+        sprintf(temp_buffer, "%02X", temp_payload[i]);    // Re-format each byte to become a two character Hex representation
+        //payload_in_hex = payload_in_hex + String(temp_payload[i], HEX);
+        payload_in_hex = payload_in_hex + String(temp_buffer);
       //  //Serial.println(temp_payload[i], HEX);
       }
-      Serial.printf("Payload Hex: ");
-      Serial.println(payload_in_hex);
+      //Serial.printf("Payload Hex: ");
+      //Serial.println(payload_in_hex);
       if (sqlite3_prepare_v2(db1, "SELECT * FROM ble_data WHERE MAC=?", -1, &stmt, NULL) == SQLITE_OK) {
         //sqlite3_bind_text(stmt, 1, mac, -1, SQLITE_STATIC);
         sqlite3_bind_text(stmt, 1, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);
@@ -329,7 +333,7 @@ void loop() {
           if (rssi > existingRssi) {
             sqlite3_finalize(stmt);
             //sqlite3_prepare_v2(db1, "UPDATE ble_data SET Name=?, Appearance=?, LastSeen=?, TxPower=?, RSSI=?, CurrentLatitude=?, CurrentLongitude=?, AltitudeMeters=?, AccuracyMeters=?, AddrType=?, ManufData=? WHERE MAC=?", -1, &stmt, NULL);
-            sqlite3_prepare_v2(db1, "UPDATE ble_data SET Name=?, Appearance=?, LastSeen=?, TxPower=?, RSSI=?, CurrentLatitude=?, CurrentLongitude=?, AltitudeMeters=?, AccuracyMeters=?, AddrType=?, ManufData=?, ServUUID=?, ServDataUUID=?, ServData=?, PayloadType=?, PayloadLenght=?, PayloadHex=? WHERE MAC=?", -1, &stmt, NULL);
+            sqlite3_prepare_v2(db1, "UPDATE ble_data SET Name=?, Appearance=?, LastSeen=?, TxPower=?, RSSI=?, CurrentLatitude=?, CurrentLongitude=?, AltitudeMeters=?, AccuracyMeters=?, AddrType=?, ManufData=?, ServUUID=?, ServDataUUID=?, ServData=?, PayloadType=?, PayloadLength=?, PayloadHex=? WHERE MAC=?", -1, &stmt, NULL);
             // Write in each pieces of the above '?' in the string
             sqlite3_bind_text(stmt, 1, name, strlen(name), SQLITE_STATIC);  // Name
             sqlite3_bind_int(stmt, 2, currentDevice.getAppearance()); // Appearance
@@ -350,12 +354,14 @@ void loop() {
             sqlite3_bind_text(stmt, 17, payload_in_hex.c_str(), strlen(payload_in_hex.c_str()), SQLITE_STATIC); // Advertisement Payload in Hex
             sqlite3_bind_text(stmt, 18, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);  // BT Address MAC
             if (sqlite3_step(stmt) != SQLITE_DONE) {
+              Serial.printf("Update to Localization of Address %s\t-\t", mac_name.toString().c_str());
               Serial.println(F("Failed to execute update statement"));
+              Serial.printf("%s: %s\n", sqlite3_errstr(sqlite3_extended_errcode(db1)), sqlite3_errmsg(db1));
             }
           } else {
             // Update data but not location
             sqlite3_finalize(stmt);
-            sqlite3_prepare_v2(db1, "UPDATE ble_data SET Name=?, Appearance=?, LastSeen=?, TxPower=?, RSSI=?, AddrType=?, ManufData=?, ServUUID=?, ServDataUUID=?, ServData=?, PayloadType=?, PayloadLenght=?, PayloadHex=? WHERE MAC=?", -1, &stmt, NULL);
+            sqlite3_prepare_v2(db1, "UPDATE ble_data SET Name=?, Appearance=?, LastSeen=?, TxPower=?, RSSI=?, AddrType=?, ManufData=?, ServUUID=?, ServDataUUID=?, ServData=?, PayloadType=?, PayloadLength=?, PayloadHex=? WHERE MAC=?", -1, &stmt, NULL);
             sqlite3_bind_text(stmt, 1, name, strlen(name), SQLITE_STATIC);  // Name
             sqlite3_bind_int(stmt, 2, currentDevice.getAppearance()); // Appearance
             sqlite3_bind_text(stmt, 3, my_timestamp, strlen(my_timestamp), SQLITE_STATIC); // LastSeen
@@ -372,7 +378,9 @@ void loop() {
             sqlite3_bind_text(stmt, 14, payload_in_hex.c_str(), strlen(payload_in_hex.c_str()), SQLITE_STATIC); // Advertisement Payload in Hex
             sqlite3_bind_text(stmt, 15, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);  // BT Address MAC
             if (sqlite3_step(stmt) != SQLITE_DONE) {
+              Serial.printf("Update without GPS of Address %s\t-\t", mac_name.toString().c_str());
               Serial.println(F("Failed to execute update statement"));
+              Serial.printf("%s: %s\n", sqlite3_errstr(sqlite3_extended_errcode(db1)), sqlite3_errmsg(db1));
             }
           }
         } else {
@@ -412,6 +420,10 @@ void loop() {
             //Serial.println(SQLITE_DONE);
             //Serial.println(stmt);
             Serial.printf("%s: %s\n", sqlite3_errstr(sqlite3_extended_errcode(db1)), sqlite3_errmsg(db1));
+            // Increment and track duplicate scan returns
+            dup_scan_count++;
+            Serial.printf("Duplicate Scan Return Occurances: ");
+            Serial.println(dup_scan_count);
           }
         }
         sqlite3_finalize(stmt);
@@ -425,9 +437,10 @@ void loop() {
   delay(2000);
 
   char my_count[40] = { 0 };
+  char dup_count[40] = { 0 };
 
 #ifdef OLED
-  if(oled_mode == 6)
+  if(oled_mode == 7)
     oled_mode = 0;
 
   switch(oled_mode)
@@ -500,6 +513,12 @@ void loop() {
       snprintf(my_count, sizeof(my_count) - 1, "Sats: %d", gps.satellites.value());
       display.clear();
       display.drawString(0, OLED_OFFSET, my_count);
+      display.display();
+      break;
+    case 6: // Duplicate Scan Count
+      snprintf(dup_count, sizeof(dup_count) - 1, "Dups: %d", dup_scan_count);
+      display.clear();
+      display.drawString(0, OLED_OFFSET, dup_count);
       display.display();
       break;
   }
