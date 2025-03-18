@@ -2,7 +2,7 @@
 #include <sqlite3.h>
 
 // TinyGPS Includes
-#include <TinyGPSPlus.h>    // Might need to use TinyGPSPlus-ESP32
+#include <TinyGPSPlus.h>
 
 // SSD1306/OLED Library Includes
 //#include <Adafruit_SSD1306.h>
@@ -263,13 +263,13 @@ void loop() {
   }
 
   // BLE Device Scanning
-  BLEScanResults *foundDevices = pBLEScan->start(scanTime, false);
+  BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
   BLEAdvertisedDevice currentDevice;
   // Parse the Data from the Found Devices
-  n = foundDevices->getCount();
+  n = foundDevices.getCount();
   //Serial.printf("[*] Devices Found: %i \n", n);
   for (int i = 0; i < n;  ++i) {
-    currentDevice = foundDevices->getDevice(i);
+    currentDevice = foundDevices.getDevice(i);
 
     if ((gps.location.isValid()) && (year > 2023)) {
       //Serial.printf("[+] Logging Attempt\t-\t");
