@@ -2,7 +2,7 @@
 #include <sqlite3.h>
 
 // TinyGPS Includes
-#include <TinyGPSPlus.h>
+#include <TinyGPSPlus.h>    // Might need to use TinyGPSPlus-ESP32
 
 // SSD1306/OLED Library Includes
 //#include <Adafruit_SSD1306.h>

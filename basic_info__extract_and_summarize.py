@@ -151,6 +151,7 @@ case ESP_BLE_AD_TYPE_32SERVICE_DATA:  // 0x20
 case ESP_BLE_AD_TYPE_128SERVICE_DATA:  // 0x21
 case ESP_BLE_AD_MANUFACTURER_SPECIFIC_TYPE:  // 0xff
 '''
+# TODO: Add dissection of advertisement information + capture of advertisement with the BLE War Driver
 
 ## Appearance Flags
 appear_data = grab_online_record(appear_uuid_url_api)
