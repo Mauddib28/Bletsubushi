@@ -194,7 +194,8 @@ void setup() {
   if (openDb("/sd/ble.db", &db1))
     return;
 
-  rc = db_exec(db1, "CREATE TABLE IF NOT EXISTS ble_data (MAC TEXT PRIMARY KEY, Name TEXT, Appearance TEXT, FirstSeen TEXT, LastSeen TEXT, TxPower INTEGER, RSSI INTEGER, CurrentLatitude REAL, CurrentLongitude REAL, AltitudeMeters REAL, AccuracyMeters REAL, AddrType TEXT, ManufData TEXT)");
+  //rc = db_exec(db1, "CREATE TABLE IF NOT EXISTS ble_data (MAC TEXT PRIMARY KEY, Name TEXT, Appearance TEXT, FirstSeen TEXT, LastSeen TEXT, TxPower INTEGER, RSSI INTEGER, CurrentLatitude REAL, CurrentLongitude REAL, AltitudeMeters REAL, AccuracyMeters REAL, AddrType TEXT, ManufData TEXT)");
+  rc = db_exec(db1, "CREATE TABLE IF NOT EXISTS ble_data (MAC TEXT PRIMARY KEY, Name TEXT, Appearance TEXT, FirstSeen TEXT, LastSeen TEXT, TxPower INTEGER, RSSI INTEGER, CurrentLatitude REAL, CurrentLongitude REAL, AltitudeMeters REAL, AccuracyMeters REAL, AddrType TEXT, ManufData TEXT, ServUUID TEXT, ServDataUUID TEXT, ServData TEXT, PayloadType TEXT, PayloadLength INTEGER, PayloadHex TEXT)");
   if (rc != SQLITE_OK) {
     sqlite3_close(db1);
     return;
@@ -291,6 +292,26 @@ void loop() {
       //Serial.println(currentDevice.getAddressType());
       //Serial.printf("ManufData: ");
       //Serial.println(currentDevice.getManufacturerData().c_str());
+      Serial.printf("Service Data: ");
+      Serial.println(currentDevice.getServiceData().c_str());
+      Serial.printf("Service Data UUID: ");
+      Serial.println(currentDevice.getServiceDataUUID().toString().c_str());
+      Serial.printf("Service UUID: ");
+      Serial.println(currentDevice.getServiceUUID().toString().c_str());
+      Serial.printf("Payload Type (first byte): ");
+      Serial.println(currentDevice.getPayload()[0], HEX);
+      Serial.printf("Payload Length: ");      // Note: Will have to read the length first, then compile the string out of hex
+      Serial.println(currentDevice.getPayloadLength());
+      // Note: Perhaps maintain the Payload Processing here and leverage is areas below?
+      String payload_in_hex = "";
+      uint8_t* temp_payload = currentDevice.getPayload();
+      size_t temp_payload_length = currentDevice.getPayloadLength();
+      for (int i = 0; i < temp_payload_length; i++) {
+        payload_in_hex = payload_in_hex + String(temp_payload[i], HEX);
+      //  //Serial.println(temp_payload[i], HEX);
+      }
+      Serial.printf("Payload Hex: ");
+      Serial.println(payload_in_hex);
       if (sqlite3_prepare_v2(db1, "SELECT * FROM ble_data WHERE MAC=?", -1, &stmt, NULL) == SQLITE_OK) {
         //sqlite3_bind_text(stmt, 1, mac, -1, SQLITE_STATIC);
         sqlite3_bind_text(stmt, 1, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);
@@ -307,7 +328,8 @@ void loop() {
           // If RSSI better, update location data
           if (rssi > existingRssi) {
             sqlite3_finalize(stmt);
-            sqlite3_prepare_v2(db1, "UPDATE ble_data SET Name=?, Appearance=?, LastSeen=?, TxPower=?, RSSI=?, CurrentLatitude=?, CurrentLongitude=?, AltitudeMeters=?, AccuracyMeters=?, AddrType=?, ManufData=? WHERE MAC=?", -1, &stmt, NULL);
+            //sqlite3_prepare_v2(db1, "UPDATE ble_data SET Name=?, Appearance=?, LastSeen=?, TxPower=?, RSSI=?, CurrentLatitude=?, CurrentLongitude=?, AltitudeMeters=?, AccuracyMeters=?, AddrType=?, ManufData=? WHERE MAC=?", -1, &stmt, NULL);
+            sqlite3_prepare_v2(db1, "UPDATE ble_data SET Name=?, Appearance=?, LastSeen=?, TxPower=?, RSSI=?, CurrentLatitude=?, CurrentLongitude=?, AltitudeMeters=?, AccuracyMeters=?, AddrType=?, ManufData=?, ServUUID=?, ServDataUUID=?, ServData=?, PayloadType=?, PayloadLenght=?, PayloadHex=? WHERE MAC=?", -1, &stmt, NULL);
             // Write in each pieces of the above '?' in the string
             sqlite3_bind_text(stmt, 1, name, strlen(name), SQLITE_STATIC);  // Name
             sqlite3_bind_int(stmt, 2, currentDevice.getAppearance()); // Appearance
@@ -320,14 +342,20 @@ void loop() {
             sqlite3_bind_double(stmt, 9, acc); // Accuracy Meters
             sqlite3_bind_int(stmt, 10, currentDevice.getAddressType()); // Address Type
             sqlite3_bind_text(stmt, 11, currentDevice.getManufacturerData().c_str(), strlen(currentDevice.getManufacturerData().c_str()), SQLITE_STATIC); // Manufacturer Data
-            sqlite3_bind_text(stmt, 12, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);  // BT Address MAC
+            sqlite3_bind_text(stmt, 12, currentDevice.getServiceUUID().toString().c_str(), strlen(currentDevice.getServiceUUID().toString().c_str()), SQLITE_STATIC); // Service UUID
+            sqlite3_bind_text(stmt, 13, currentDevice.getServiceDataUUID().toString().c_str(), strlen(currentDevice.getServiceDataUUID().toString().c_str()), SQLITE_STATIC); // Service Data UUID
+            sqlite3_bind_text(stmt, 14, currentDevice.getServiceData().c_str(), strlen(currentDevice.getServiceData().c_str()), SQLITE_STATIC); // Service Data
+            sqlite3_bind_text(stmt, 15, String(currentDevice.getPayload()[0], HEX).c_str(), strlen(String(currentDevice.getPayload()[0], HEX).c_str()), SQLITE_STATIC); // Advertisement Payload Type
+            sqlite3_bind_int(stmt, 16, currentDevice.getPayloadLength()); // Advertisement Payload Length
+            sqlite3_bind_text(stmt, 17, payload_in_hex.c_str(), strlen(payload_in_hex.c_str()), SQLITE_STATIC); // Advertisement Payload in Hex
+            sqlite3_bind_text(stmt, 18, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);  // BT Address MAC
             if (sqlite3_step(stmt) != SQLITE_DONE) {
               Serial.println(F("Failed to execute update statement"));
             }
           } else {
             // Update data but not location
             sqlite3_finalize(stmt);
-            sqlite3_prepare_v2(db1, "UPDATE ble_data SET Name=?, Appearance=?, LastSeen=?, TxPower=?, RSSI=?, AddrType=?, ManufData=? WHERE MAC=?", -1, &stmt, NULL);
+            sqlite3_prepare_v2(db1, "UPDATE ble_data SET Name=?, Appearance=?, LastSeen=?, TxPower=?, RSSI=?, AddrType=?, ManufData=?, ServUUID=?, ServDataUUID=?, ServData=?, PayloadType=?, PayloadLenght=?, PayloadHex=? WHERE MAC=?", -1, &stmt, NULL);
             sqlite3_bind_text(stmt, 1, name, strlen(name), SQLITE_STATIC);  // Name
             sqlite3_bind_int(stmt, 2, currentDevice.getAppearance()); // Appearance
             sqlite3_bind_text(stmt, 3, my_timestamp, strlen(my_timestamp), SQLITE_STATIC); // LastSeen
@@ -335,14 +363,22 @@ void loop() {
             sqlite3_bind_int(stmt, 5, currentDevice.getRSSI()); // RSSI
             sqlite3_bind_int(stmt, 6, currentDevice.getAddressType()); // Address Type
             sqlite3_bind_text(stmt, 7, currentDevice.getManufacturerData().c_str(), strlen(currentDevice.getManufacturerData().c_str()), SQLITE_STATIC); // Manufacturer Data
-            sqlite3_bind_text(stmt, 8, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);  // BT Address MAC
+            sqlite3_bind_text(stmt, 8, currentDevice.getManufacturerData().c_str(), strlen(currentDevice.getManufacturerData().c_str()), SQLITE_STATIC); // Manufacturer Data
+            sqlite3_bind_text(stmt, 9, currentDevice.getServiceUUID().toString().c_str(), strlen(currentDevice.getServiceUUID().toString().c_str()), SQLITE_STATIC); // Service UUID
+            sqlite3_bind_text(stmt, 10, currentDevice.getServiceDataUUID().toString().c_str(), strlen(currentDevice.getServiceDataUUID().toString().c_str()), SQLITE_STATIC); // Service Data UUID
+            sqlite3_bind_text(stmt, 11, currentDevice.getServiceData().c_str(), strlen(currentDevice.getServiceData().c_str()), SQLITE_STATIC); // Service Data
+            sqlite3_bind_text(stmt, 12, String(currentDevice.getPayload()[0], HEX).c_str(), strlen(String(currentDevice.getPayload()[0], HEX).c_str()), SQLITE_STATIC); // Advertisement Payload Type
+            sqlite3_bind_int(stmt, 13, currentDevice.getPayloadLength()); // Advertisement Payload Length
+            sqlite3_bind_text(stmt, 14, payload_in_hex.c_str(), strlen(payload_in_hex.c_str()), SQLITE_STATIC); // Advertisement Payload in Hex
+            sqlite3_bind_text(stmt, 15, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);  // BT Address MAC
             if (sqlite3_step(stmt) != SQLITE_DONE) {
               Serial.println(F("Failed to execute update statement"));
             }
           }
         } else {
           sqlite3_finalize(stmt);
-          sqlite3_prepare_v2(db1, "INSERT INTO ble_data (MAC, Name, Appearance, FirstSeen, LastSeen, TxPower, RSSI, CurrentLatitude, CurrentLongitude, AltitudeMeters, AccuracyMeters, AddrType, ManufData) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", -1, &stmt, NULL);
+          //sqlite3_prepare_v2(db1, "INSERT INTO ble_data (MAC, Name, Appearance, FirstSeen, LastSeen, TxPower, RSSI, CurrentLatitude, CurrentLongitude, AltitudeMeters, AccuracyMeters, AddrType, ManufData) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", -1, &stmt, NULL);
+          sqlite3_prepare_v2(db1, "INSERT INTO ble_data (MAC, Name, Appearance, FirstSeen, LastSeen, TxPower, RSSI, CurrentLatitude, CurrentLongitude, AltitudeMeters, AccuracyMeters, AddrType, ManufData, ServUUID, ServDataUUID, ServData, PayloadType, PayloadLength, PayloadHex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", -1, &stmt, NULL);
           sqlite3_bind_text(stmt, 1, mac_name.toString().c_str(), strlen(mac_name.toString().c_str()), SQLITE_STATIC);  // BT Address MAC
           sqlite3_bind_text(stmt, 2, name, strlen(name), SQLITE_STATIC);  // Name
           sqlite3_bind_int(stmt, 3, currentDevice.getAppearance()); // Appearance
@@ -356,6 +392,19 @@ void loop() {
           sqlite3_bind_double(stmt, 11, acc); // Accuracy Meters
           sqlite3_bind_int(stmt, 12, currentDevice.getAddressType()); // Address Type
           sqlite3_bind_text(stmt, 13, currentDevice.getManufacturerData().c_str(), strlen(currentDevice.getManufacturerData().c_str()), SQLITE_STATIC); // Manufacturer Data
+          sqlite3_bind_text(stmt, 14, currentDevice.getServiceUUID().toString().c_str(), strlen(currentDevice.getServiceUUID().toString().c_str()), SQLITE_STATIC); // Service UUID
+          sqlite3_bind_text(stmt, 15, currentDevice.getServiceDataUUID().toString().c_str(), strlen(currentDevice.getServiceDataUUID().toString().c_str()), SQLITE_STATIC); // Service Data UUID
+          sqlite3_bind_text(stmt, 16, currentDevice.getServiceData().c_str(), strlen(currentDevice.getServiceData().c_str()), SQLITE_STATIC); // Service Data
+          sqlite3_bind_text(stmt, 17, String(currentDevice.getPayload()[0], HEX).c_str(), strlen(String(currentDevice.getPayload()[0], HEX).c_str()), SQLITE_STATIC); // Advertisement Payload Type
+          // Process Advertisement Payload - Moved Above for more universal access to database operations
+          //String payload_in_hex = "";
+          //uint8_t* temp_payload = currentDevice.getPayload();
+          //size_t temp_payload_length = currentDevice.getPayloadLength();
+          //for (int i = 0; i < temp_payload_length; i++) {
+          //    payload_in_hex = payload_in_hex + String(temp_payload[i], HEX);
+          //}
+          sqlite3_bind_int(stmt, 18, currentDevice.getPayloadLength()); // Advertisement Payload Length
+          sqlite3_bind_text(stmt, 19, payload_in_hex.c_str(), strlen(payload_in_hex.c_str()), SQLITE_STATIC); // Advertisement Payload in Hex
           if (sqlite3_step(stmt) != SQLITE_DONE) {
             Serial.printf("Addendum of Address %s\t-\t", mac_name.toString().c_str());
             Serial.println(F("Failed to execute insert statement"));
